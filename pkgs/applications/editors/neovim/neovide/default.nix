@@ -16,6 +16,7 @@
 , gn
 , llvmPackages
 , makeFontsConf
+, libicns
 , libglvnd
 , libxkbcommon
 , stdenv
@@ -82,7 +83,10 @@ rustPlatform.buildRustPackage rec {
     python3 # rust-xcb
     llvmPackages.clang # skia
     removeReferencesTo
-  ] ++ lib.optionals stdenv.isDarwin [ xcbuild ];
+  ] ++ lib.optionals stdenv.isDarwin [
+    xcbuild
+    libicns
+  ];
 
   # All tests passes but at the end cargo prints for unknown reason:
   #   error: test failed, to rerun pass '--bin neovide'
@@ -125,14 +129,51 @@ rustPlatform.buildRustPackage rec {
         --prefix LD_LIBRARY_PATH : ${libPath}
     '';
 
-  postInstall = ''
-    for n in 16x16 32x32 48x48 256x256; do
-      install -m444 -D "assets/neovide-$n.png" \
-        "$out/share/icons/hicolor/$n/apps/neovide.png"
-    done
-    install -m444 -Dt $out/share/icons/hicolor/scalable/apps assets/neovide.svg
-    install -m444 -Dt $out/share/applications assets/neovide.desktop
-  '';
+  postInstall =
+    if stdenv.isDarwin then
+      let
+        bundleMeta = (builtins.fromTOML (builtins.readFile "${src}/Cargo.toml")).package.metadata.bundle;
+        pListText = lib.generators.toPlist { } {
+          CFBundleDevelopmentRegion = "English";
+          CFBundleDisplayName = bundleMeta.name;
+          CFBundleExecutable = "neovide";
+          CFBundleIconFile = "neovide.icns";
+          CFBundleIconFiles = [ "neovide.icns" ];
+          CFBundleIdentifier = bundleMeta.identifier;
+          CFBundleInfoDictionaryVersion = "6.0";
+          CFBundleName = bundleMeta.name;
+          CFBundlePackageType = "APPL";
+          CFBundleSignature = "???";
+          CFBundleVersion = version;
+          LSMinimumSystemVersion = bundleMeta.osx_minimum_system_version;
+          NSHighResolutionCapable = true;
+          NSHumanReadableCopyright = bundleMeta.copyright;
+        };
+      in
+      ''
+        mkdir -p $out/Applications/Neovide.app/Contents
+        ln -s $out/bin $out/Applications/Neovide.app/Contents/MacOS
+
+        cat > "$out/Applications/Neovide.app/Contents/Info.plist" <<EOF
+        ${pListText}
+        EOF
+
+        png2icns neovide.icns \
+          assets/neovide-16x16.png \
+          assets/neovide-32x32.png \
+          assets/neovide-48x48.png \
+          assets/neovide-256x256.png \
+
+        install -m444 -Dt $out/Applications/Neovide.app/Contents/Resources neovide.icns
+      ''
+    else ''
+      for n in 16x16 32x32 48x48 256x256; do
+        install -m444 -D "assets/neovide-$n.png" \
+          "$out/share/icons/hicolor/$n/apps/neovide.png"
+      done
+      install -m444 -Dt $out/share/icons/hicolor/scalable/apps assets/neovide.svg
+      install -m444 -Dt $out/share/applications assets/neovide.desktop
+    '';
 
   disallowedReferences = [ SKIA_SOURCE_DIR ];
 
