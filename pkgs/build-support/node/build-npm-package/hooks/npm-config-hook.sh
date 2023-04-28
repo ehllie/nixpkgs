@@ -3,14 +3,15 @@
 npmConfigHook() {
     echo "Executing npmConfigHook"
 
-    export PATH="@patchedNode@/bin:$PATH"
-    export nativeBuildInputs="@patchedNode@ $nativeBuildInputs"
+    # Use npm patches in the nodejs package
+    export NIX_NODEJS_BUILDNPMPACKAGE=1
+    export prefetchNpmDeps="@prefetchNpmDeps@"
 
     echo "Configuring npm"
 
     export HOME="$TMPDIR"
     export npm_config_nodedir="@nodeSrc@"
-    export npm_config_node_gyp="@patchedNode@/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js"
+    export npm_config_node_gyp="@nodeGyp@"
 
     if [ -z "${npmDeps-}" ]; then
         echo
