@@ -45,7 +45,7 @@ in
 stdenv.mkDerivation (args // {
   inherit npmDeps npmBuildScript;
 
-  nativeBuildInputs = nativeBuildInputs ++ [ nodejs npmConfigHook npmBuildHook npmInstallHook ];
+  nativeBuildInputs = nativeBuildInputs ++ [ npmConfigHook npmBuildHook npmInstallHook ];
   buildInputs = buildInputs ++ [ nodejs ];
 
   strictDeps = true;
