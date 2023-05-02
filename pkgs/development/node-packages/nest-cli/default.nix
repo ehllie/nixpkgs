@@ -22,9 +22,9 @@ buildNpmPackage rec {
     hash = "sha256-9I6ez75byOPVKvX93Yv1qSM3JaWlmmvZCTjNB++cmw0=";
   };
 
-  # PYTHON = "${python3}/bin/python";
+  nativeBuildInputs = [ python3 ];
 
-  # buildInputs = optionals isDarwin [ CoreServices ];
+  buildInputs = optionals isDarwin [ CoreServices ];
 
   npmDepsHash = "sha256-g6H5sBQMGNgUhP7PtBQT1+eDqPVx0kA5A+HwI5Bx9EY=";
 
