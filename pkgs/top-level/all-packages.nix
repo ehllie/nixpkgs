@@ -5872,6 +5872,8 @@ with pkgs;
 
   sqlint = callPackage ../development/tools/sqlint { };
 
+  tailwindcss-language-server = callPackage ../development/node-packages/tailwindcss-language-server { };
+
   squawk = callPackage ../development/tools/squawk { };
 
   antibody = callPackage ../shells/zsh/antibody { };
