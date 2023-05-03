@@ -5874,6 +5874,8 @@ with pkgs;
 
   squawk = callPackage ../development/tools/squawk { };
 
+  squoosh-cli = callPackage ../tools/graphics/squoosh-cli { };
+
   antibody = callPackage ../shells/zsh/antibody { };
 
   antigen = callPackage ../shells/zsh/antigen { };
