@@ -34,12 +34,14 @@
 , npmPruneFlags ? npmInstallFlags
   # Value for npm `--workspace` flag and directory in which the files to be installed are found.
 , npmWorkspace ? null
+  # Additional locfiles to be used when fetching dependencies.
+, npmExtraLockfileDirs ? [ ]
 , ...
 } @ args:
 
 let
   npmDeps = fetchNpmDeps {
-    inherit forceGitDeps src srcs sourceRoot prePatch patches postPatch;
+    inherit forceGitDeps src srcs sourceRoot prePatch patches postPatch npmExtraLockfileDirs;
     name = "${name}-npm-deps";
     hash = npmDepsHash;
   };
@@ -54,6 +56,8 @@ in
 stdenv.mkDerivation (args // {
   inherit npmDeps npmBuildScript;
 
+  npmExtraLockfileDirs = builtins.concatStringsSep " " npmExtraLockfileDirs;
+
   nativeBuildInputs = nativeBuildInputs ++ [ nodejs npmConfigHook npmBuildHook npmInstallHook ];
   buildInputs = buildInputs ++ [ nodejs ];
 
@@ -61,6 +65,8 @@ stdenv.mkDerivation (args // {
 
   # Stripping takes way too long with the amount of files required by a typical Node.js project.
   dontStrip = args.dontStrip or true;
+
+  passthru = { inherit npmDeps; } // args.passthru or { };
 
   meta = (args.meta or { }) // { platforms = args.meta.platforms or nodejs.meta.platforms; };
 })

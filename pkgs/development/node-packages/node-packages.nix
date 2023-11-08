@@ -92703,24 +92703,6 @@ in
     bypassCache = true;
     reconstructLock = true;
   };
-  pyright = nodeEnv.buildNodePackage {
-    name = "pyright";
-    packageName = "pyright";
-    version = "1.1.334";
-    src = fetchurl {
-      url = "https://registry.npmjs.org/pyright/-/pyright-1.1.334.tgz";
-      sha512 = "EJoW78gXPeAWd0e86P8kSIbY1pO3JJxNYu2BRlv/ZflcMvCY+zpyamuQC5EcXxXtr1WzBdcQwfo/NIBqtQPEow==";
-    };
-    buildInputs = globalBuildInputs;
-    meta = {
-      description = "Type checker for the Python language";
-      homepage = "https://github.com/Microsoft/pyright#readme";
-      license = "MIT";
-    };
-    production = true;
-    bypassCache = true;
-    reconstructLock = true;
-  };
   remod-cli = nodeEnv.buildNodePackage {
     name = "remod-cli";
     packageName = "remod-cli";

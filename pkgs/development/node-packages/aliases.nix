@@ -143,4 +143,5 @@ mapAliases {
   inherit (pkgs) yaml-language-server; # added 2023-09-05
   inherit (pkgs) yo; # added 2023-08-20
   zx = pkgs.zx; # added 2023-08-01
+  inherit (pkgs) pyright; #added 2023-11-8
 }

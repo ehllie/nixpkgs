@@ -6,6 +6,7 @@ use std::{
     fs,
     io::Write,
     process::{Command, Stdio},
+    rc::Rc,
 };
 use tempfile::{tempdir, TempDir};
 use url::Url;
@@ -14,16 +15,21 @@ use crate::util;
 
 pub mod lock;
 
-pub fn lockfile(content: &str, force_git_deps: bool) -> anyhow::Result<Vec<Package>> {
-    let mut packages = lock::packages(content)
-        .context("failed to extract packages from lockfile")?
-        .into_par_iter()
-        .map(|p| {
-            let n = p.name.clone().unwrap();
+pub fn lockfiles(contents: Rc<[Rc<str>]>, force_git_deps: bool) -> anyhow::Result<Vec<Package>> {
+    let mut packages = Vec::new();
+    for content in contents.iter() {
+        packages.extend(
+            lock::packages(content)
+                .context("failed to extract packages from lockfile")?
+                .into_par_iter()
+                .map(|p| {
+                    let n = p.name.clone().unwrap();
 
-            Package::from_lock(p).with_context(|| format!("failed to parse data for {n}"))
-        })
-        .collect::<anyhow::Result<Vec<_>>>()?;
+                    Package::from_lock(p).with_context(|| format!("failed to parse data for {n}"))
+                })
+                .collect::<anyhow::Result<Vec<_>>>()?,
+        );
+    }
 
     let mut new = Vec::new();
 
@@ -64,7 +70,10 @@ pub fn lockfile(content: &str, force_git_deps: bool) -> anyhow::Result<Vec<Packa
         }
 
         if let Ok(lockfile_contents) = lockfile_contents {
-            new.append(&mut lockfile(&lockfile_contents, force_git_deps)?);
+            new.append(&mut lockfiles(
+                Rc::from([Rc::from(lockfile_contents)]),
+                force_git_deps,
+            )?);
         }
     }
 

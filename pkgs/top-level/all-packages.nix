@@ -34170,7 +34170,7 @@ with pkgs;
 
   ptex = callPackage ../development/libraries/ptex { };
 
-  pyright = nodePackages.pyright;
+  pyright = callPackage ../development/tools/pyright { };
 
   qbec = callPackage ../applications/networking/cluster/qbec { };
 

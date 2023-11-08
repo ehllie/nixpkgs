@@ -28,6 +28,13 @@ npmConfigHook() {
 
     local -r cacheLockfile="$npmDeps/package-lock.json"
     local -r srcLockfile="$PWD/package-lock.json"
+    IFS=" " read -r -a lockfileDirs <<< "$npmExtraLockfileDirs"
+    local fixupArgs=( "--fixup-lockfile" "$srcLockfile" )
+    for lockfileDir in "${lockfileDirs[@]}"; do
+        fixupArg=("--fixup-lockfile" "$(realpath "$lockfileDir/package-lock.json")" )
+        fixupArgs=( "${fixupArgs[@]}" "${fixupArg[@]}" )
+    done
+
 
     echo "Validating consistency between $srcLockfile and $cacheLockfile"
 
@@ -68,7 +75,7 @@ npmConfigHook() {
     export CACHE_MAP_PATH="$TMP/MEOW"
     @prefetchNpmDeps@ --map-cache
 
-    @prefetchNpmDeps@ --fixup-lockfile "$srcLockfile"
+    @prefetchNpmDeps@ "${fixupArgs[@]}"
 
     local cachePath
 

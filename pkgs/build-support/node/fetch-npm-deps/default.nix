@@ -124,6 +124,7 @@
     { name ? "npm-deps"
     , hash ? ""
     , forceGitDeps ? false
+    , npmExtraLockfileDirs ? []
     , ...
     } @ args:
     let
@@ -136,6 +137,7 @@
         };
 
       forceGitDeps_ = lib.optionalAttrs forceGitDeps { FORCE_GIT_DEPS = true; };
+      extraLockfiles = builtins.concatStringsSep " " (builtins.map (lfd: "${lfd}/package-lock.json") npmExtraLockfileDirs);
     in
     stdenvNoCC.mkDerivation (args // {
       inherit name;
@@ -158,7 +160,7 @@
           exit 1
         fi
 
-        prefetch-npm-deps package-lock.json $out
+        prefetch-npm-deps package-lock.json ${extraLockfiles} -o $out
 
         runHook postBuild
       '';

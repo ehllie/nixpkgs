@@ -2,13 +2,15 @@
 
 use crate::cacache::{Cache, Key};
 use anyhow::{anyhow, bail};
+use clap::Parser;
 use rayon::prelude::*;
 use serde_json::{Map, Value};
 use std::{
     collections::HashMap,
     env, fs,
     path::{Path, PathBuf},
-    process::{self, Command},
+    process::Command,
+    rc::Rc,
 };
 use tempfile::tempdir;
 use url::Url;
@@ -158,7 +160,7 @@ fn map_cache() -> anyhow::Result<HashMap<Url, String>> {
 
     let content_path = Path::new(&env::var_os("npmDeps").unwrap()).join("_cacache/index-v5");
 
-    for entry in WalkDir::new(content_path) {
+    for entry in WalkDir::new(content_path).follow_links(true) {
         let entry = entry?;
 
         if entry.file_type().is_file() {
@@ -172,18 +174,31 @@ fn map_cache() -> anyhow::Result<HashMap<Url, String>> {
     Ok(hashes)
 }
 
+#[derive(Parser, Debug)]
+#[command(version)]
+struct Args {
+    /// Lockfiles to fixup using `$CACHE_MAP_PATH` if present
+    #[arg(short, long, group = "mode", required = true)]
+    pub fixup_lockfile: Vec<PathBuf>,
+
+    /// Write a map of dependencies in `$npmDeps` to `$CACHE_MAP_PATH`
+    #[arg(short, long, group = "mode", required = true)]
+    pub map_cache: bool,
+
+    /// An array of lockfiles to prefetch
+    #[arg(group = "mode", required = true)]
+    pub lockfiles: Vec<PathBuf>,
+
+    /// A directory where the prefetched dependencies will be stored
+    /// If not specified, their hashes will be printed to stdout
+    #[arg(short, long)]
+    pub outdir: Option<PathBuf>,
+}
+
 fn main() -> anyhow::Result<()> {
     env_logger::init();
 
-    let args = env::args().collect::<Vec<_>>();
-
-    if args.len() < 2 {
-        println!("usage: {} <path/to/package-lock.json>", args[0]);
-        println!();
-        println!("Prefetches npm dependencies for usage by fetchNpmDeps.");
-
-        process::exit(1);
-    }
+    let args = Args::parse();
 
     if let Ok(jobs) = env::var("NIX_BUILD_CORES") {
         if !jobs.is_empty() {
@@ -197,73 +212,73 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    if args[1] == "--fixup-lockfile" {
-        let lock = serde_json::from_str(&fs::read_to_string(&args[2])?)?;
-
+    if args.fixup_lockfile.len() > 0 {
         let cache = cache_map_path()
             .map(|map_path| Ok::<_, anyhow::Error>(serde_json::from_slice(&fs::read(map_path)?)?))
             .transpose()?;
 
-        if let Some(fixed) = fixup_lockfile(lock, &cache)? {
-            println!("Fixing lockfile");
+        for lockfile in args.fixup_lockfile {
+            let lock = serde_json::from_str(&fs::read_to_string(&lockfile)?)?;
+            if let Some(fixed) = fixup_lockfile(lock, &cache)? {
+                println!("Fixing {lockfile:?}");
 
-            fs::write(&args[2], serde_json::to_string(&fixed)?)?;
+                fs::write(&lockfile, serde_json::to_string(&fixed)?)?;
+            }
         }
-
-        return Ok(());
-    } else if args[1] == "--map-cache" {
+    } else if args.map_cache {
         let map = map_cache()?;
 
         fs::write(
             cache_map_path().expect("CACHE_MAP_PATH environment variable must be set"),
             serde_json::to_string(&map)?,
         )?;
-
-        return Ok(());
-    }
-
-    let lock_content = fs::read_to_string(&args[1])?;
-
-    let out_tempdir;
-
-    let (out, print_hash) = if let Some(path) = args.get(2) {
-        (Path::new(path), false)
     } else {
-        out_tempdir = tempdir()?;
+        let lock_contents = args
+            .lockfiles
+            .iter()
+            .map(|path| fs::read_to_string(path).map(Rc::from))
+            .collect::<Result<Rc<_>, _>>()?;
 
-        (out_tempdir.path(), true)
+        let out_tempdir;
+
+        let out = if let Some(outdir) = &args.outdir {
+            outdir
+        } else {
+            out_tempdir = tempdir()?;
+            out_tempdir.path()
+        };
+
+        let packages = parse::lockfiles(lock_contents.clone(), env::var("FORCE_GIT_DEPS").is_ok())?;
+
+        let cache = Cache::new(out.join("_cacache"));
+
+        packages.into_par_iter().try_for_each(|package| {
+            eprintln!("{}", package.name);
+
+            let tarball = package.tarball()?;
+            let integrity = package.integrity().map(ToString::to_string);
+
+            cache
+                .put(
+                    format!("make-fetch-happen:request-cache:{}", package.url),
+                    package.url,
+                    &tarball,
+                    integrity,
+                )
+                .map_err(|e| anyhow!("couldn't insert cache entry for {}: {e:?}", package.name))?;
+
+            Ok::<_, anyhow::Error>(())
+        })?;
+
+        fs::write(out.join("package-lock.json"), lock_contents[0].as_ref())?;
+
+        if args.outdir.is_none() {
+            Command::new("nix")
+                .args(["--experimental-features", "nix-command", "hash", "path"])
+                .arg(out.as_os_str())
+                .status()?;
+        }
     };
-
-    let packages = parse::lockfile(&lock_content, env::var("FORCE_GIT_DEPS").is_ok())?;
-
-    let cache = Cache::new(out.join("_cacache"));
-
-    packages.into_par_iter().try_for_each(|package| {
-        eprintln!("{}", package.name);
-
-        let tarball = package.tarball()?;
-        let integrity = package.integrity().map(ToString::to_string);
-
-        cache
-            .put(
-                format!("make-fetch-happen:request-cache:{}", package.url),
-                package.url,
-                &tarball,
-                integrity,
-            )
-            .map_err(|e| anyhow!("couldn't insert cache entry for {}: {e:?}", package.name))?;
-
-        Ok::<_, anyhow::Error>(())
-    })?;
-
-    fs::write(out.join("package-lock.json"), lock_content)?;
-
-    if print_hash {
-        Command::new("nix")
-            .args(["--experimental-features", "nix-command", "hash", "path"])
-            .arg(out.as_os_str())
-            .status()?;
-    }
 
     Ok(())
 }
